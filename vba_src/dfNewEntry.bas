@@ -13,6 +13,7 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
+
 'globals
 Dim new_type_ws_was_created As Boolean
 
@@ -33,6 +34,7 @@ Dim PACKET_INFO_TOMATO_TOP As Long
 
 Dim LAST_COLUMN As Long
 
+'initializes form, layout, etc. constants
 Private Function InitConstants()
     DOUBLE_QUOTE = Chr(34)
     
@@ -55,18 +57,7 @@ Private Function InitConstants()
     LAST_COLUMN = 10
 End Function
 
-Private Sub rbDeter_Click()
-    ResetRadioButton rbDeter
-    ResetRadioButton rbIndeter
-    rbDeter.Value = True
-End Sub
-
-Private Sub rbIndeter_Click()
-    ResetRadioButton rbIndeter
-    ResetRadioButton rbDeter
-    rbIndeter.Value = True
-End Sub
-
+'executes before this form is shown, initializes globals, types array and the form layout
 Private Sub UserForm_Initialize()
     ThisWorkbook.InitGlobals
     InitConstants
@@ -85,6 +76,7 @@ Private Sub UserForm_Initialize()
     ShowNoTypeSelectedLayout
 End Sub
 
+'handles cancel button click, returns focus to PacketInfoWS and unloads this form
 Private Sub btnCancel_Click()
     If new_type_ws_was_created Then
         
@@ -97,20 +89,34 @@ Private Sub btnCancel_Click()
     Unload dfNewEntry
 End Sub
 
+'determinate tomato radio button click event
+Private Sub rbDeter_Click()
+    ResetRadioButton rbDeter
+    ResetRadioButton rbIndeter
+    rbDeter.Value = True
+End Sub
+
+'indeterminate tomato radio button click event
+Private Sub rbIndeter_Click()
+    ResetRadioButton rbIndeter
+    ResetRadioButton rbDeter
+    rbIndeter.Value = True
+End Sub
+
 'add VBA worksheet change code to passed in worksheet
 Private Function AddWorksheetChangeCode(ws As Worksheet)
     Dim sCode As String
     
-    'construct worksheet change string
+    'construct worksheet change event sub string
     sCode = "Private Sub Worksheet_Change(ByVal Target As Range)" & vbNewLine & vbNewLine
     
+    'insert callback code for rows being manually deleted from worksheet
     sCode = sCode & vbTab & "If Target.Rows.Count >= 1 And Target.Columns.Count = Columns.Count Then" & vbNewLine & vbNewLine
-    
     sCode = sCode & vbTab & vbTab & "'pass event to workbook" & vbNewLine
     sCode = sCode & vbTab & vbTab & "ThisWorkbook.RowsDeletedFromWorksheet Me, Target" & vbNewLine
-    
     sCode = sCode & vbTab & "End If" & vbNewLine & vbNewLine
     
+    'end worksheet change event sub
     sCode = sCode & "End Sub" & vbNewLine
     
     'make sure Tools -> References... -> Microsoft Visual Basic for Applications Extensibility 5.3
@@ -123,6 +129,7 @@ Private Function AddWorksheetChangeCode(ws As Worksheet)
     ThisWorkbook.VBProject.VBComponents(ws.CodeName).CodeModule.AddFromString sCode
 End Function
 
+'handles new type and new entry creation and calls functions to update master
 Private Sub btnCreate_Click()
     Dim ws As Worksheet
     
@@ -175,6 +182,7 @@ Private Sub btnCreate_Click()
     End If
 End Sub
 
+'validates create new entry calls, makes sure new entry isn't a duplicate and isn't empty
 Private Function ValidateExistingType(ws As Worksheet) As Boolean
     Dim v As Boolean: v = True
     
@@ -224,6 +232,7 @@ Private Function ValidateExistingType(ws As Worksheet) As Boolean
     ValidateExistingType = v
 End Function
 
+'handles different types being selected from the type combo box
 Private Sub cbType_Change()
     Dim cb_type As String
     
@@ -257,6 +266,7 @@ Private Function GetNextEmptyCell(ws As Worksheet) As Range
     Set GetNextEmptyCell = rng.Offset(1, 0)
 End Function
 
+'validates create new type calls, makes sure new type isn't a duplicate and isn't empty
 Private Function ValidateNewType() As Boolean
     Dim v As Boolean: v = True
     
@@ -293,7 +303,7 @@ Private Function ValidateNewType() As Boolean
     ValidateNewType = v
 End Function
 
-'get data ready and append it to sheet
+'gets form data ready and appends it to sheet
 Private Function InsertCreatedEntry(ByRef ws As Worksheet) As Long
     Dim RefRange As Range
     Set RefRange = GetNextEmptyCell(ws)
@@ -381,7 +391,7 @@ Private Function InsertCreatedEntry(ByRef ws As Worksheet) As Long
             indet = "Determinate. "
         End If
     End If
-    'insert suggestion value
+    'insert suggestion value, if tomato then prepend in/determinate
     sug.Value = Trim(indet & tbSuggestions.Value)
     
     'notify user of successful insertion
@@ -404,22 +414,23 @@ Private Function ResetTextBox(tb As MSForms.TextBox)
     tb.SpecialEffect = fmSpecialEffectSunken
 End Function
 
-'give passed in textbox a red border to signal error
+'give passed in radio button a red background to signal error
 Private Function ErrorRadioButton(rb As MSForms.OptionButton)
     rb.BackColor = &HFF
 End Function
 
-'return passed in textbox to its default look
+'return passed in radio button to its default look
 Private Function ResetRadioButton(rb As MSForms.OptionButton)
     rb.BackColor = &H8000000F
     rb.SpecialEffect = fmButtonEffectSunken
 End Function
 
-
+'return name textbox to its default look when entered, resets error textbox
 Private Sub tbName_Enter()
     ResetTextBox tbName
 End Sub
 
+'clears all form data other than type
 Private Function ClearAllButType()
     tbDepth.Value = ""
     tbName.Value = ""
@@ -458,7 +469,7 @@ Private Function ShowNoTypeSelectedLayout()
     cbType.SetFocus
 End Function
 
-'type combo box has "new entry" selected, so that layout
+'type combo box has "new entry" selected, so show that layout
 Private Function ShowCreateNewTypeLayout()
     Me.Width = FORM_WIDTH
     Me.Height = FORM_HEIGHT_NO_TYPE
@@ -474,6 +485,7 @@ Private Function ShowCreateNewTypeLayout()
     tbName.SetFocus
 End Function
 
+'type combo box has an existing type selected, other than tomato, so show that layout
 Private Function ShowExistingTypeLayout()
     EnableTextBox tbName
     
@@ -494,6 +506,7 @@ Private Function ShowExistingTypeLayout()
     rbDeter.Visible = False
 End Function
 
+'type combo box has tomato selected, so show that layout
 Private Function ShowTomatoTypeLayout()
     Me.Height = FORM_HEIGHT_TOMATO
     
@@ -507,16 +520,19 @@ Private Function ShowTomatoTypeLayout()
     
 End Function
 
+'puts a passed in textbox to an enabled state with a white background
 Private Function EnableTextBox(tb As MSForms.TextBox)
     tb.Enabled = True
     tb.BackColor = vbWhite
 End Function
 
+'puts a passed in textbox to a disabled state with a gray background
 Private Function DisableTextBox(tb As MSForms.TextBox)
     tb.Enabled = False
     tb.BackColor = &H8000000F
 End Function
 
+'returns an array of strings populated with all the names of the worksheets, other than master
 Private Function GetTypesArray(ByRef wb As Workbook) As String()
     Dim ws_names() As String
     '-1 due to wb.PacketInfoWS
@@ -537,6 +553,7 @@ Private Function GetTypesArray(ByRef wb As Workbook) As String()
     GetTypesArray = ws_names
 End Function
 
+'returns the length of a passed in array
 Public Function ArrayLen(arr As Variant) As Long
     ArrayLen = UBound(arr) - LBound(arr) + 1
 End Function
