@@ -161,15 +161,15 @@ Private Sub btnCreate_Click()
         Set ws = ThisWorkbook.Sheets(cbType.Value)
         
         If ValidateExistingType(ws) Then
-            Dim next_row As Long
-            next_row = InsertCreatedEntry(ws)
+            Dim ins_row As Long
+            ins_row = InsertCreatedEntry(ws)
             
             'stop showing user form
             Unload dfNewEntry
             
             'set up the copy range for master
             Dim cpy_range As Range
-            Set cpy_range = ws.Range(ws.Cells(next_row, 1), ws.Cells(next_row, LAST_COLUMN))
+            Set cpy_range = ws.Range(ws.Cells(ins_row, 1), ws.Cells(ins_row, LAST_COLUMN))
             
             ThisWorkbook.UpdateMasterAfterInsert ThisWorkbook.PacketInfoWS, ws, cpy_range
             
@@ -184,32 +184,34 @@ End Sub
 
 'validates create new entry calls, makes sure new entry isn't a duplicate and isn't empty
 Private Function ValidateExistingType(ws As Worksheet) As Boolean
-    Dim v As Boolean: v = True
+    Dim valid As Boolean: valid = True
+    Dim name_str As String
+    name_str = CStr(Trim(tbName.Value))
     
     'check if tbName is empty
-    If Trim(tbName.Value) = "" Then
-        v = False
-        ErrorTextBox tbName
+    If name_str = "" Then
+        'tbName is empty, notify user
         MsgBox Prompt:="The new type name cannot be empty.", title:="Error"
+        'give tbName an error look
+        ErrorTextBox tbName
+        valid = False
     End If
     
-    If v = False Then
-        ValidateExistingType = v
+    If valid = False Then
+        ValidateExistingType = valid
         Exit Function
     End If
     
     'check if name is already present in type's names
-    Dim rngNames As Range, rngName As Range
+    Dim rngNames As Range
     Set rngNames = ws.Range([A4], [A4].End(xlDown))
-
-    Set rngName = rngNames.Find(Trim(tbName), LookIn:=xlValues)
-    If rngName Is Nothing Then
-        v = True
-    Else
-        'name already exists, notify and error tbName
+    
+    If StringMatchedInRange(name_str, rngNames) Then
+        'name already exists, notify user
         MsgBox "The name, " & Trim(tbName) & " already exists.", title:="Error"
+        'give tbName an error look
         ErrorTextBox tbName
-        v = False
+        valid = False
     End If
     
     'if tomato -> validate indeterminate and determinate
@@ -220,16 +222,16 @@ Private Function ValidateExistingType(ws As Worksheet) As Boolean
                 
             ErrorRadioButton rbIndeter
             ErrorRadioButton rbDeter
-            v = False
+            valid = False
         ElseIf rbIndeter.Value = False And rbDeter.Value = False Then
             MsgBox "You must specify if this tomato is indeterminate or determinate.", title:="Error"
             ErrorRadioButton rbIndeter
             ErrorRadioButton rbDeter
-            v = False
+            valid = False
         End If
     End If
     
-    ValidateExistingType = v
+    ValidateExistingType = valid
 End Function
 
 'handles different types being selected from the type combo box
@@ -256,7 +258,7 @@ End Sub
 'gets the next empty cell in a passed in column
 Private Function GetNextEmptyCell(ws As Worksheet) As Range
     Dim rng As Range
-    Set rng = ws.Columns(1).Find(What:="*", After:=ws.[A1], LookIn:=xlFormulas, _
+    Set rng = ws.Columns(1).Find(what:="*", After:=ws.[A1], LookIn:=xlFormulas, _
                                  SearchOrder:=xlByColumns, SearchDirection:=xlPrevious)
     
     If rng Is Nothing Then
@@ -268,16 +270,19 @@ End Function
 
 'validates create new type calls, makes sure new type isn't a duplicate and isn't empty
 Private Function ValidateNewType() As Boolean
-    Dim v As Boolean: v = True
+    Dim valid As Boolean: valid = True
+    Dim name_str As String
+    
+    name_str = CStr(LCase(Trim(tbName.Value)))
     
     'check if tbName is empty
-    If Trim(tbName.Value) = "" Then
-        v = False
+    If name_str = "" Then
+        valid = False
         ErrorTextBox tbName
         MsgBox Prompt:="The new type name cannot be empty.", title:="Error"
     End If
     
-    If v = False Then
+    If valid = False Then
         ValidateNewType = False
         Exit Function
     End If
@@ -290,23 +295,30 @@ Private Function ValidateNewType() As Boolean
     'check if tbName value is already a type
     For Each s In ws_names
         If LCase(Trim(tbName.Value)) = LCase(Trim(s)) Then
-            v = False
+            valid = False
             ErrorTextBox tbName
             MsgBox Prompt:="The type, " & s & ", already exists.", title:="Error"
         End If
         
-        If v = False Then
+        If valid = False Then
             Exit For
         End If
     Next s
     
-    ValidateNewType = v
+    ValidateNewType = valid
 End Function
 
-'gets form data ready and appends it to sheet
+'gets form data ready and inserts it alphabetically, by name, in the passed in sheet
 Private Function InsertCreatedEntry(ByRef ws As Worksheet) As Long
+    Dim ins_index As Long
+    ins_index = FindNameRowInsertIndex(ws, 4, CStr(tbName.Value))
+    
+    'insert new row above ins_index
+    InsertRowAboveIndex ws, ins_index
+    
+    'reference the newly inserted row
     Dim RefRange As Range
-    Set RefRange = GetNextEmptyCell(ws)
+    Set RefRange = ws.Range(ws.Cells(ins_index, 1)).Offset(-1, 0)
     
     Set n = RefRange 'name
     Set dtg = RefRange.Offset(0, 1) 'days to germination
@@ -398,6 +410,48 @@ Private Function InsertCreatedEntry(ByRef ws As Worksheet) As Long
     MsgBox Trim(tbName.Value) & " was created successfully."
     
     InsertCreatedEntry = RefRange.row
+End Function
+
+Private Function FindNameRowInsertIndex(ws As Worksheet, start As Long, name_str As String) As Long
+    Dim index_found As Boolean
+    Dim index As Long
+    Dim cur_name_str As String
+    Dim res As Long
+    
+    index_found = False
+    index = start
+    Do While Not index_found
+        cur_name_str = CStr(ws.Cells(index, 1).Value)
+        
+        If cur_name_str <> "" Then
+            res = StrComp(name_str, cur_name_str)
+            
+            If res = -1 Then 'name_str < cur_name_str alphabetically
+                index_found = True
+                
+            ElseIf res = 1 Then 'name_str > cur_name_str alphabetically
+                'iterate index
+                index = index + 1
+            ElseIf res = 0 Then 'name_str = cur_name_str
+                'we should not reach this point, due to no duplicate names
+                index_found = True
+            End If
+            
+        ElseIf cur_name_str = "" Then
+            'reached end of names column
+            index_found = True
+        End If
+        
+    Loop
+    
+    FindNameRowInsertIndex = index
+End Function
+
+'insert a new row above the specfied row index
+Function InsertRowAboveIndex(ws As Worksheet, row_index As Long)
+    
+    ws.Rows(row_index).Insert Shift:=xlDown, _
+        CopyOrigin:=xlFormatFromRightOrBelow
 End Function
 
 'give passed in textbox a red border to signal error
