@@ -15,7 +15,9 @@ Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
 
 'globals
-Dim new_type_ws_was_created As Boolean
+Public newly_created_type_ws As Worksheet
+Public new_type_ws_was_created As Boolean
+Public inserting_new_entry As Boolean
 
 'constants
 Dim DOUBLE_QUOTE As String
@@ -63,8 +65,12 @@ Private Sub UserForm_Initialize()
     InitConstants
     
     'initialize dfNewEntry globals
-    'signal that a new type worksheet has not been created
+    'signals that a new type worksheet has been created
     new_type_ws_was_created = False
+    'stores the newly created type worksheet until after its first entry has been inserted in master
+    Set newly_created_type_ws = Nothing
+    'signals that a new entry is being inserted
+    inserting_new_entry = False
     
     Dim wb As Workbook: Set wb = ThisWorkbook
     Dim ws_names() As String: ws_names = GetTypesArray(wb) 'get string array of worksheet names
@@ -76,11 +82,20 @@ Private Sub UserForm_Initialize()
     ShowNoTypeSelectedLayout
 End Sub
 
+'handles closing of user form via top right corner (x) button
+Private Sub UserForm_QueryClose(Cancel As Integer, CloseMode As Integer)
+    If CloseMode = 0 Then
+        CheckForAndDeleteNewlyCreatedTypeWorksheet
+        
+        'tip: If you want to prevent closing UserForm by Close (×) button in the right-top
+        'corner of the UserForm, just uncomment the following line:
+        'Cancel = True
+    End If
+End Sub
+
 'handles cancel button click, returns focus to PacketInfoWS and unloads this form
 Private Sub btnCancel_Click()
-    If new_type_ws_was_created Then
-        
-    End If
+    CheckForAndDeleteNewlyCreatedTypeWorksheet
     
     'show the packet info sheet if cancel is pressed
     ThisWorkbook.PacketInfoWS.Activate
@@ -88,6 +103,15 @@ Private Sub btnCancel_Click()
     'unload/exit this form
     Unload dfNewEntry
 End Sub
+
+'check for and delete a new type worksheet if first entry was not inserted in master
+Private Function CheckForAndDeleteNewlyCreatedTypeWorksheet()
+    If Not newly_created_type_ws Is Nothing Then
+        Application.DisplayAlerts = False
+        newly_created_type_ws.Delete
+        Application.DisplayAlerts = True
+    End If
+End Function
 
 'determinate tomato radio button click event
 Private Sub rbDeter_Click()
@@ -110,12 +134,19 @@ Private Function AddWorksheetChangeCode(ws As Worksheet)
     'construct worksheet change event sub string
     sCode = "Private Sub Worksheet_Change(ByVal Target As Range)" & vbNewLine & vbNewLine
     
-    'insert callback code for rows being manually deleted from worksheet
-    sCode = sCode & vbTab & "If Target.Rows.Count >= 1 And Target.Columns.Count = Columns.Count Then" & vbNewLine & vbNewLine
-    sCode = sCode & vbTab & vbTab & "'pass event to workbook" & vbNewLine
-    sCode = sCode & vbTab & vbTab & "ThisWorkbook.RowsDeletedFromWorksheet Me, Target" & vbNewLine
-    sCode = sCode & vbTab & "End If" & vbNewLine & vbNewLine
+    'check if user form is inserting a new entry
+    sCode = sCode & vbTab & "'check if user form is inserting a new entry" & vbNewLine
+    sCode = sCode & vbTab & "If Not dfNewEntry.inserting_new_entry Then" & vbNewLine
     
+    'insert callback code for rows being manually deleted from worksheet
+    sCode = sCode & vbTab & vbTab & "If Target.Rows.Count >= 1 And Target.Columns.Count = Columns.Count Then" & vbNewLine & vbNewLine
+    sCode = sCode & vbTab & vbTab & vbTab & "'pass deleted row index and count to workbook" & vbNewLine
+    sCode = sCode & vbTab & vbTab & vbTab & "ThisWorkbook.RowsDeletedFromWorksheet Me, Target" & vbNewLine
+    sCode = sCode & vbTab & vbTab & "End If" & vbNewLine
+    
+    'end new entry insertion check
+    sCode = sCode & vbTab & "End If" & vbNewLine & vbNewLine
+        
     'end worksheet change event sub
     sCode = sCode & "End Sub" & vbNewLine
     
@@ -145,11 +176,14 @@ Private Sub btnCreate_Click()
             Set ws = ThisWorkbook.CreateNewWorksheetAndMirrorMaster(strname)
             AddWorksheetChangeCode ws
             
+            'assign new type ws, in case we need to delete it on cancel or close
+            Set newly_created_type_ws = ws
             new_type_ws_was_created = True
             
             'add new type to cbType.List
             cbType.List = GetTypesArray(ThisWorkbook)
             cbType.Value = cbType.List(ArrayLen(cbType.List) - 1)
+            cbType.Enabled = False
             
             tbName.Value = ""
             
@@ -161,8 +195,14 @@ Private Sub btnCreate_Click()
         Set ws = ThisWorkbook.Sheets(cbType.Value)
         
         If ValidateExistingType(ws) Then
+            'signal new entry insertion
+            inserting_new_entry = True
+            
             Dim ins_row As Long
             ins_row = InsertCreatedEntry(ws)
+            
+            'un-signal new entry insertion
+            inserting_new_entry = False
             
             'stop showing user form
             Unload dfNewEntry
@@ -173,6 +213,10 @@ Private Sub btnCreate_Click()
             
             ThisWorkbook.UpdateMasterAfterInsert ThisWorkbook.PacketInfoWS, ws, cpy_range
             
+            'set newly created type worksheet to nothing after first entry is added to master
+            Set newly_created_type_ws = Nothing
+            cbType.Enabled = True
+                        
             'show master worksheet again
             ThisWorkbook.PacketInfoWS.Activate
         End If
@@ -225,6 +269,7 @@ Private Function ValidateExistingType(ws As Worksheet) As Boolean
             valid = False
         ElseIf rbIndeter.Value = False And rbDeter.Value = False Then
             MsgBox "You must specify if this tomato is indeterminate or determinate.", title:="Error"
+            
             ErrorRadioButton rbIndeter
             ErrorRadioButton rbDeter
             valid = False
@@ -237,8 +282,8 @@ End Function
 'handles different types being selected from the type combo box
 Private Sub cbType_Change()
     Dim cb_type As String
-    
     cb_type = cbType.Value
+    
     If cb_type = "new type" Then
         ShowNoTypeSelectedLayout
         ShowCreateNewTypeLayout
@@ -318,7 +363,7 @@ Private Function InsertCreatedEntry(ByRef ws As Worksheet) As Long
     
     'reference the newly inserted row
     Dim RefRange As Range
-    Set RefRange = ws.Range(ws.Cells(ins_index, 1)).Offset(-1, 0)
+    Set RefRange = ws.Cells(ins_index, 1)
     
     Set n = RefRange 'name
     Set dtg = RefRange.Offset(0, 1) 'days to germination
@@ -409,7 +454,7 @@ Private Function InsertCreatedEntry(ByRef ws As Worksheet) As Long
     'notify user of successful insertion
     MsgBox Trim(tbName.Value) & " was created successfully."
     
-    InsertCreatedEntry = RefRange.row
+    InsertCreatedEntry = ins_index
 End Function
 
 Private Function FindNameRowInsertIndex(ws As Worksheet, start As Long, name_str As String) As Long
