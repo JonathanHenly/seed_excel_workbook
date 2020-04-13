@@ -59,7 +59,7 @@ Function UpdateMasterAfterInsert(ma As Worksheet, ws As Worksheet, cpy_range As 
     Set this_type = all_types.Find(this_type_str, LookIn:=xlValues)
     
     If this_type Is Nothing Then
-        'type doesn't exist in master, need to insert it and its entries
+        'type doesn't exist in master, need to insert it
         InsertNewTypeEntry ma, this_type_str, cpy_range
     Else
         'type already exists, insert new entry
@@ -68,25 +68,28 @@ Function UpdateMasterAfterInsert(ma As Worksheet, ws As Worksheet, cpy_range As 
     
 End Function
 
-Private Function InsertNewTypeEntry(ma As Worksheet, type_str As String, _
-                                    cpy_range As Range)
-    insert_index = FindRowInsertIndex(ma, 4, type_str)
-    InsertTypeAbove ma.Cells(insert_index, 1), type_str, cpy_range
-End Function
-
-Function InsertTypeAbove(ins_range As Range, type_str As String, cpy_range As Range)
-    ins_range.EntireRow.Insert Shift:=xlDown, CopyOrigin:=xlFormatFromRightOrBelow
+Private Function InsertNewTypeEntry(ma As Worksheet, type_str As String, cpy_range As Range)
+    Dim row_insert_index As Long
+    row_insert_index = FindRowInsertIndex(ma, 4, type_str)
     
+    Dim row_insert_range As Range
+    Set row_insert_range = ma.Cells(row_insert_index, 1)
+    
+    MsgBox "row_insert_range.Row = " & row_insert_range.row & "  col count: " & row_insert_range.Columns.count
+    
+    row_insert_range.EntireRow.Insert Shift:=xlDown, CopyOrigin:=xlFormatFromRightOrBelow
+    
+    row_insert_range.Offset(-1, 0).Value = type_str
+    row_insert_range.Offset(-1, 0).HorizontalAlignment = xlCenter
+    row_insert_range.Offset(-1, 0).VerticalAlignment = xlCenter
+    
+    'insert type's first entry
     cpy_range.copy
-    
-    ins_range.Offset(-1, 0).Value = type_str
-    ins_range.Offset(-1, 0).HorizontalAlignment = xlCenter
-    ins_range.Offset(-1, 0).VerticalAlignment = xlCenter
-    
-    'paste the first entry values
-    ins_range.Offset(-1, 1).PasteSpecial Paste:=xlPasteValues
+    this_type.Offset(-1, 1).PasteSpecial Paste:=xlPasteValues
     
     Application.CutCopyMode = False
+    
+    InsertTypesFirstEntry row_insert_range, cpy_range
 End Function
 
 Public Function FindRowInsertIndex(ws As Worksheet, start As Long, type_str As String) As Long
@@ -134,11 +137,21 @@ End Function
 
 Private Function InsertExistingTypeEntry(ma As Worksheet, this_type As Range, _
                                          cpy_range As Range)
+    MsgBox "This Far!"
     Dim mrc As Long
     mrc = GetMergedRowCount(this_type)
     this_type.UnMerge
     
-    InsertNameAbove
+    'check if this is a type with no entries (i.e. newly created)
+    If ma.Cells(this_type.row, 2).Value = "" Then
+        InsertTypesFirstEntry ma, this_type, cpy_range
+    End If
+    
+    'DEBUG
+    Exit Function
+    
+    InsertNameAbove ma, this_type, cpy_range
+    
     InsertRowBelow this_type, cpy_range
     
     Dim new_range As Range
@@ -166,7 +179,6 @@ Private Function InsertNameAbove(ma As Worksheet, ins_range As Range, cpy_range 
     If (cpy_range.row - 4) > mrc Then
         ins_row = ins_range.row + (mrc - 1)
     Else
-        Dim ins_row As Long
         ins_row = ins_range.row + (cpy_range.row - 4)
         
         Dim type_value As String: type_value = ""
