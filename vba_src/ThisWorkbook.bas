@@ -43,7 +43,7 @@ End Function
 
 Function RowsDeletedFromWorksheet(ws As Worksheet, Target As Range)
     MsgBox "Row(s) " & Target.row & " deleted from " & ws.name
-    MsgBox Target.rows.count & " row(s) deleted from " & ws.name
+    MsgBox Target.Rows.count & " row(s) deleted from " & ws.name
 End Function
 
 Function UpdateMasterAfterInsert(ma As Worksheet, ws As Worksheet, cpy_range As Range)
@@ -70,9 +70,7 @@ End Function
 
 Private Function InsertNewTypeEntry(ma As Worksheet, type_str As String, _
                                     cpy_range As Range)
-    
     insert_index = FindRowInsertIndex(ma, 4, type_str)
-    
     InsertTypeAbove ma.Cells(insert_index, 1), type_str, cpy_range
 End Function
 
@@ -108,7 +106,7 @@ Public Function FindRowInsertIndex(ws As Worksheet, start As Long, type_str As S
     Do While Not index_found
         cur_type_str = CStr(ws.Cells(index, 1).Value)
         
-        mrc = ws.Cells(index, 1).MergeArea.rows.count
+        mrc = ws.Cells(index, 1).MergeArea.Rows.count
         
         If cur_type_str <> "" Then
             res = StrComp(type_str, cur_type_str)
@@ -139,12 +137,55 @@ Private Function InsertExistingTypeEntry(ma As Worksheet, this_type As Range, _
     Dim mrc As Long
     mrc = GetMergedRowCount(this_type)
     this_type.UnMerge
-            
+    
+    InsertNameAbove
     InsertRowBelow this_type, cpy_range
     
     Dim new_range As Range
     Set new_range = ma.Range(this_type.Cells(1, 1), this_type.Cells(mrc + 1, 1))
     new_range.Merge 'Across:=xlCenterAcrossSelection
+End Function
+
+Private Function InsertNameAbove(ma As Worksheet, ins_range As Range, cpy_range As Range)
+    Dim mrc As Long
+    mrc = GetMergedRowCount(ins_range)
+    ins_range.UnMerge
+    
+    Dim ins_row As Long
+    
+    ins_row = ins_range.row + (mrc - 1)
+    
+    MsgBox "ins_range.Row = " & ins_range.row & vbNewLine _
+         & "cpy_range.Row = " & cpy_range.row & vbNewLine _
+         & "mrc = " & mrc & vbNewLine _
+         & "ins_row = " & ins_row
+    'DEBUG
+    Exit Function
+    
+    
+    If (cpy_range.row - 4) > mrc Then
+        ins_row = ins_range.row + (mrc - 1)
+    Else
+        Dim ins_row As Long
+        ins_row = ins_range.row + (cpy_range.row - 4)
+        
+        Dim type_value As String: type_value = ""
+        If ins_row = ins_range.row Then
+            type_value = CStr(ma.Cells(ins_row, 1).Value)
+            ma.Cells(ins_row, 1).Value = ""
+            
+            ma.Cells(ins_row, 1).EntireRow.Insert Shift:=xlDown, _
+                CopyOrigin:=xlFormatFromRightOrBelow
+            
+            ma.Cells(ins_row, 1).Value = type_value
+            
+            cpy_range.copy
+            
+            ma.Cells(ins_row, 2).PasteSpecial Paste:=xlPasteValues
+        End If
+    End If
+    
+    
 End Function
 
 Function InsertRowAbove(ins_range As Range, cpy_range As Range)
@@ -409,7 +450,7 @@ End Function
 'gets the next empty row, with an offset, in a passed in column
 Function NextEmptyRowByCol(ws As Worksheet, row_off As Long, col As Long) As Long
     Dim rng As Range
-    Set rng = ws.Columns(col).Find(What:="*", After:=ws.Cells(row_off, col), _
+    Set rng = ws.Columns(col).Find(what:="*", After:=ws.Cells(row_off, col), _
         LookIn:=xlFormulas, SearchOrder:=xlByColumns, SearchDirection:=xlPrevious)
     
     Dim row As Long
@@ -427,44 +468,5 @@ Private Function GetMergedColCount(r As Range) As Long
 End Function
 
 Private Function GetMergedRowCount(r As Range) As Long
-    GetMergedRowCount = r.Cells.MergeArea.rows.count
+    GetMergedRowCount = r.Cells.MergeArea.Rows.count
 End Function
-
-'export specified source codes to destination folder
-Private Sub GEN_USE_ExportAllModulesFromProject()
-    'https://www.ozgrid.com/forum/forum/help-forums/excel-general/60787-export-all-modules-in-current-project
-         'reference to extensibility library
-    Dim objMyProj As VBProject
-    Dim objVBComp As VBComponent
-    Dim destFolder As String
-    
-    destFolder = "E:\garden\repo\seed_excel_workbook\vba_src\"
-    Set objMyProj = Application.VBE.ActiveVBProject
-    
-    Dim ex_srcs_msg As String
-    ex_srcs_msg = "Export Path:" & vbNewLine & " - " & destFolder _
-                  & vbNewLine & vbNewLine & "Exported Sources:"
-    
-    Dim ex_cur As Boolean: ex_cur = False
-    For Each objVBComp In objMyProj.VBComponents
-        'only export certain sources, not every sheet's source
-        Select Case CStr(objVBComp.name)
-            Case "ThisWorkbook": ex_cur = True
-            Case "dfNewEntry": ex_cur = True
-            Case "Module1": ex_cur = True
-        End Select
-        
-        If ex_cur Then
-            Dim ex_name As String
-            ex_name = objVBComp.name & ".bas"
-            
-            objVBComp.Export destFolder & ex_name
-            
-            ex_srcs_msg = ex_srcs_msg & vbNewLine & " - " & ex_name
-            
-            ex_cur = False
-        End If
-    Next
-    
-    MsgBox Prompt:=ex_srcs_msg, title:="Source Exporting Complete"
-End Sub
