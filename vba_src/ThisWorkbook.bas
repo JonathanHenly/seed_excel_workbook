@@ -70,12 +70,10 @@ End Function
 
 Private Function InsertNewTypeEntry(ma As Worksheet, type_str As String, cpy_range As Range)
     Dim row_insert_index As Long
-    row_insert_index = FindRowInsertIndex(ma, 4, type_str)
+    row_insert_index = FindTypeInsertIndexAsc(ma, 4, type_str)
     
     Dim row_insert_range As Range
     Set row_insert_range = ma.Cells(row_insert_index, 1)
-    
-    MsgBox "row_insert_range.Row = " & row_insert_range.row & "  col count: " & row_insert_range.Columns.count
     
     row_insert_range.EntireRow.Insert Shift:=xlDown, CopyOrigin:=xlFormatFromRightOrBelow
     
@@ -85,14 +83,12 @@ Private Function InsertNewTypeEntry(ma As Worksheet, type_str As String, cpy_ran
     
     'insert type's first entry
     cpy_range.copy
-    this_type.Offset(-1, 1).PasteSpecial Paste:=xlPasteValues
+    row_insert_range.Offset(-1, 1).PasteSpecial Paste:=xlPasteValues
     
     Application.CutCopyMode = False
-    
-    InsertTypesFirstEntry row_insert_range, cpy_range
 End Function
 
-Public Function FindRowInsertIndex(ws As Worksheet, start As Long, type_str As String) As Long
+Public Function FindTypeInsertIndexAsc(ws As Worksheet, start As Long, type_str As String) As Long
     If type_str = "" Then
         MsgBox "The new type string cannot be empty", title:="Error"
         Exit Function
@@ -132,25 +128,17 @@ Public Function FindRowInsertIndex(ws As Worksheet, start As Long, type_str As S
         
     Loop
     
-    FindRowInsertIndex = index
+    FindTypeInsertIndexAsc = index
 End Function
 
 Private Function InsertExistingTypeEntry(ma As Worksheet, this_type As Range, _
                                          cpy_range As Range)
     MsgBox "This Far!"
-    Dim mrc As Long
-    mrc = GetMergedRowCount(this_type)
-    this_type.UnMerge
     
-    'check if this is a type with no entries (i.e. newly created)
-    If ma.Cells(this_type.row, 2).Value = "" Then
-        InsertTypesFirstEntry ma, this_type, cpy_range
-    End If
+    InsertNameAbove ma, this_type, cpy_range
     
     'DEBUG
     Exit Function
-    
-    InsertNameAbove ma, this_type, cpy_range
     
     InsertRowBelow this_type, cpy_range
     
