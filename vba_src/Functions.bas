@@ -11,7 +11,7 @@ Private Sub GEN_USE_ExportAllModulesFromProject()
     Dim objVBComp As VBComponent
     Dim destFolder As String
     
-    destFolder = "E:\garden\repo\seed_excel_workbook\vba_src\"
+    destFolder = ActiveWorkbook.Path & "\vba_src\"
     Set objMyProj = Application.VBE.ActiveVBProject
     
     Dim ex_srcs_msg As String
