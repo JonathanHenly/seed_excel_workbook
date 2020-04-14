@@ -50,7 +50,7 @@ Function StringMatchedInRange(what As String, rng As Range)
     
     On Error GoTo MatchNotFound:
     With Application.WorksheetFunction
-        matched_row = .Match(Trim(tbName), rngNames)
+        matched_row = .Match(Trim(tbName), rng)
     End With
     
 ReturnFromFunction:
